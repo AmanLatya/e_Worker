@@ -23,8 +23,8 @@ app.use("/worker", workerRoutes);
 app.use("/me", meRoutes);
 app.use("/request", requestRoutes);
 
-app.use("/", (req, res) => {
-  res.json({ message: "Welcome to eWorker API" });
-});
+app.get("/", (req, res) => {
+    res.send("Welcome to eWorker API");
+})
 
 module.exports = app;
