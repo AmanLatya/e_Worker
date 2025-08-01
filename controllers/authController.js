@@ -3,6 +3,7 @@ const Worker = require("../models/Worker");
 const { signToken } = require("../config/jwt");
 const bcrypt = require("bcryptjs");
 const { OAuth2Client } = require("google-auth-library");
+const { response } = require("express");
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
 
@@ -146,7 +147,7 @@ exports.login = async (req, res) => {
     // Try user first
     let account = await User.findOne({ email }).select("+password");
     let role = "user";
-    // console.log(account);
+
     if (!account) {
       account = await Worker.findOne({ email }).select("+password");
       role = "worker";
@@ -183,15 +184,16 @@ exports.login = async (req, res) => {
       role,
     });
 
+
     if (role == "worker" && account.profile == false) {
       return res.status(403).json({
-        message: "Profile Not Completed",
+        isProfileComplete: false,
         success: true,
         token,
         role,
       });
     }
-    return res.json({
+    return res.status(200).json({
       success: true,
       token,
       role,
@@ -210,137 +212,90 @@ exports.login = async (req, res) => {
 // ======================= GOOGLE AUTH ===========================
 exports.googleAuth = async (req, res) => {
   try {
-    console.log("Google Auth Request Body:", req.body); // Debug log
-
     const { token: googleToken, role = "user" } = req.body;
 
-    // Validate token presence
-    if (!googleToken) {
-      console.error("Google token is missing");
-      return errorResponse(res, 400, "Google token is required");
+    if (!googleToken || typeof googleToken !== "string") {
+      return errorResponse(res, 400, "Invalid or missing Google token");
     }
 
-    // Validate token is a string
-    if (typeof googleToken !== "string") {
-      console.error("Google token is not a string");
-      return errorResponse(res, 400, "Invalid token format");
-    }
-
-    // Validate token structure (basic JWT format check)
     const tokenParts = googleToken.split(".");
-    if (tokenParts.length !== 3) {
-      console.error("Invalid JWT structure - token parts:", tokenParts.length);
-      return errorResponse(res, 400, "Invalid Google token structure");
+    if (tokenParts.length !== 3 || tokenParts.some(part => !part)) {
+      return errorResponse(res, 400, "Malformed Google JWT token");
     }
 
-    // Validate each JWT part exists
-    if (!tokenParts[0] || !tokenParts[1] || !tokenParts[2]) {
-      console.error("Malformed JWT parts");
-      return errorResponse(res, 400, "Malformed Google token");
+    // Verify the token with Google
+    const ticket = await googleClient.verifyIdToken({
+      idToken: googleToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, email_verified, name, sub, picture } = payload;
+
+    if (!email_verified) {
+      return res.status(400).json({
+        success: false,
+        message: "Google email is not verified",
+      });
     }
 
-    console.log("Token format validated, verifying with Google...");
+    let user = null;
+    let isNewUser = false;
 
-    try {
-      // Verify the Google ID token
-      const ticket = await googleClient.verifyIdToken({
-        idToken: googleToken,
-        audience: GOOGLE_CLIENT_ID, // Must match exactly
-      });
+    if (role === "worker") {
+      user = await Worker.findOne({ email });
+    } else {
+      user = await User.findOne({ email });
+    }
 
-      const payload = ticket.getPayload();
-      console.log("Google payload:", {
-        email: payload.email,
-        name: payload.name,
-        email_verified: payload.email_verified,
-      });
+    if (!user) {
+      isNewUser = true;
+      const newUser = {
+        name,
+        email,
+        googleId: sub,
+        role,
+        isEmailVerified: true,
+      };
+      user = role === "worker"
+        ? await Worker.create(newUser)
+        : await User.create(newUser);
+    } else if (user.googleId && user.googleId !== sub) {
+      return errorResponse(res, 400, "Email already linked to another Google account");
+    } else if (!user.googleId) {
+      return errorResponse(res, 400, "Email registered with password. Use email login.");
+    }
 
-      if (!payload.email_verified) {
-        console.error("Google email not verified for:", payload.email);
-        return res.status(400).json({
-          success: false,
-          message: "Google email not verified",
-        });
-      }
+    const jwtToken = signToken({
+      id: user._id,
+      email: user.email,
+      role: user.role,
+    });
 
-      // Check both User and Worker collections
-      let user = await User.findOne({ email: payload.email })
-      console.log("user - ", user)
-      let isNewUser = false;
-
-      if (!user && role === "worker") {
-        user = await Worker.findOne({ email: payload.email })
-        console.log("worker - ", user)
-      }
-
-      // Create new account if doesn't exist
-      if (!user) {
-        isNewUser = true;
-        const userData = {
-          name: payload.name,
-          email: payload.email,
-          googleId: payload.sub,
-          role,
-          isEmailVerified: true,
-        };
-
-        console.log("Creating new user with role:", role);
-        user =
-          role === "worker"
-            ? await Worker.create(userData)
-            : await User.create(userData);
-      } else if (user.googleId && user.googleId !== payload.sub) {
-        // Account exists but wasn't created with this Google account
-        console.error("Google ID mismatch for:", payload.email);
-        return res.status(400).json({
-          success: false,
-          message: "Email already registered with different Google account",
-        });
-      } else if (!user.googleId) {
-        // Account exists but wasn't created with Google auth
-        console.error("Email registered with password for:", payload.email);
-        return res.status(400).json({
-          success: false,
-          message:
-            "Email already registered with password. Please log in with password instead.",
-        });
-      }
-
-      // Generate JWT token
-      const jwtToken = signToken({
-        id: user._id,
-        email: user.email,
-        role: user.role,
-      });
-
-      console.log("Authentication successful for:", user.email);
-
-      return res.json({
+    if (user.role == "worker" && user.profile == false) {
+      return res.status(403).json({
+        isProfileComplete: false,
         success: true,
         token: jwtToken,
-        isNewUser,
-        user: {
-          id: user._id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          picture: payload.picture,
-        },
+        role,
       });
-    } catch (verifyError) {
-      console.error("Google token verification failed:", verifyError);
-      if (verifyError.message.includes("Token used too late")) {
-        return errorResponse(
-          res,
-          400,
-          "Expired Google token. Please sign in again."
-        );
-      }
-      return errorResponse(res, 400, "Google token verification failed");
     }
+
+    return res.status(200).json({
+      success: true,
+      token: jwtToken,
+      isNewUser,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        picture,
+      },
+    });
   } catch (error) {
-    console.error("Google authentication error:", error);
-    return errorResponse(res, 500, "Google authentication failed", error);
+    console.error("Google auth error:", error);
+    return errorResponse(res, 500, "Internal server error");
   }
 };
 
@@ -348,7 +303,7 @@ exports.googleAuth = async (req, res) => {
 exports.completeWorkerProfile = async (req, res) => {
   try {
     const { name, location, skill } = req.body;
-    if(!name || !location || !skill){
+    if (!name || !location || !skill) {
       return res.status(400).json({
         success: false,
         message: "All fields are required",

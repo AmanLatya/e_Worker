@@ -77,7 +77,63 @@ Base URL: `/auth`
 #### 2. Register Worker
 - **URL:** `POST /auth/register/worker`
 - **Description:** Register a new worker account
+- **Authentication:** Not required...existing code...
+
+#### 3. Login
+- **URL:** `POST /auth/login`
+- **Description:** Login with email and password (works for both users and workers)
 - **Authentication:** Not required
+- **Request Body:**
+  ```json
+  {
+    "email": "string (required)",
+    "password": "string (required)"
+  }
+  ```
+- **Response:**
+  - **For Users:**
+    ```json
+    {
+      "success": true,
+      "token": "jwt_token",
+      "role": "user",
+      "user": {
+        "id": "user_id",
+        "name": "user_name",
+        "email": "user_email",
+        "role": "user"
+      }
+    }
+    ```
+  - **For Workers with completed profile:**
+    ```json
+    {
+      "success": true,
+      "token": "jwt_token",
+      "role": "worker",
+      "user": {
+        "id": "worker_id",
+        "name": "worker_name",
+        "email": "worker_email",
+        "role": "worker"
+      }
+    }
+    ```
+  - **For Workers with incomplete profile:**
+    ```json
+    {
+      "isProfileComplete": false,
+      "success": true,
+      "token": "jwt_token",
+      "role": "worker"
+    }
+    ```
+- **Error Codes:** 
+  - 400 (email/password missing, account not found, invalid credentials, Google account)
+  - 403 (worker profile not completed)
+  - 500 (server error)
+
+...existing
 - **Request Body:**
   ```json
   {
