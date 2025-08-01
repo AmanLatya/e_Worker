@@ -348,6 +348,12 @@ exports.googleAuth = async (req, res) => {
 exports.completeWorkerProfile = async (req, res) => {
   try {
     const { name, location, skill } = req.body;
+    if(!name || !location || !skill){
+      return res.status(400).json({
+        success: false,
+        message: "All fields are required",
+      });
+    }
     const workerId = req.user?._id;
 
     if (!workerId || req.user.role !== "worker") {
