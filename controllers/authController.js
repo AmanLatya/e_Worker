@@ -146,7 +146,7 @@ exports.login = async (req, res) => {
     // Try user first
     let account = await User.findOne({ email }).select("+password");
     let role = "user";
-    console.log(account);
+    // console.log(account);
     if (!account) {
       account = await Worker.findOne({ email }).select("+password");
       role = "worker";
@@ -169,6 +169,7 @@ exports.login = async (req, res) => {
     }
 
     const isMatch = await bcrypt.compare(password, account.password);
+    console.log(isMatch);
     if (!isMatch) {
       return res.status(400).json({
         success: false,
@@ -182,6 +183,14 @@ exports.login = async (req, res) => {
       role,
     });
 
+    if (role == "worker" && account.profile == false) {
+      return res.status(403).json({
+        message: "Profile Not Completed",
+        success: true,
+        token,
+        role,
+      });
+    }
     return res.json({
       success: true,
       token,
@@ -360,8 +369,8 @@ exports.completeWorkerProfile = async (req, res) => {
     if (skill) worker.skill = skill;
 
     if (location) {
-      const { lat, lng } = location;
-      if (typeof lat !== "number" || typeof lng !== "number") {
+      const { ltd, lng } = location;
+      if (typeof ltd !== "number" || typeof lng !== "number") {
         return res.status(400).json({
           success: false,
           message: "Invalid location coordinates",
@@ -369,8 +378,9 @@ exports.completeWorkerProfile = async (req, res) => {
       }
       worker.location = {
         type: "Point",
-        coordinates: [lng, lat],
+        coordinates: [lng, ltd],
       };
+      worker.profile = true
     }
 
     await worker.save();
@@ -384,6 +394,7 @@ exports.completeWorkerProfile = async (req, res) => {
         email: worker.email,
         skill: worker.skill,
         location: worker.location,
+        profile: true
       },
     });
   } catch (error) {

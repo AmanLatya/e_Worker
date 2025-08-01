@@ -113,20 +113,47 @@ Base URL: `/auth`
   }
   ```
 - **Response:**
-  ```json
-  {
-    "success": true,
-    "token": "jwt_token",
-    "role": "user|worker",
-    "user": {
-      "id": "user_id",
-      "name": "user_name",
-      "email": "user_email",
-      "role": "user|worker"
+  - **For Users:**
+    ```json
+    {
+      "success": true,
+      "token": "jwt_token",
+      "role": "user",
+      "user": {
+        "id": "user_id",
+        "name": "user_name",
+        "email": "user_email",
+        "role": "user"
+      }
     }
-  }
-  ```
-- **Error Codes:** 400 (invalid credentials), 500 (server error)
+    ```
+  - **For Workers with completed profile:**
+    ```json
+    {
+      "success": true,
+      "token": "jwt_token",
+      "role": "worker",
+      "user": {
+        "id": "worker_id",
+        "name": "worker_name",
+        "email": "worker_email",
+        "role": "worker"
+      }
+    }
+    ```
+  - **For Workers with incomplete profile:**
+    ```json
+    {
+      "success": true,
+      "token": "jwt_token",
+      "role": "worker",
+      "message": "Profile Not Completed"
+    }
+    ```
+- **Error Codes:** 
+  - 400 (email/password missing, account not found, invalid credentials, Google account)
+  - 403 (worker profile not completed)
+  - 500 (server error)
 
 #### 4. Google Authentication
 - **URL:** `POST /auth/google`
@@ -165,8 +192,8 @@ Base URL: `/auth`
   {
     "name": "string (optional)",
     "location": {
-      "lat": "number (required)",
-      "lng": "number (required)"
+      "ltd": "number (required, latitude)",
+      "lng": "number (required, longitude)"
     },
     "skill": "string (optional)"
   }
@@ -183,12 +210,17 @@ Base URL: `/auth`
       "skill": "worker_skill",
       "location": {
         "type": "Point",
-        "coordinates": [lng, lat]
-      }
+        "coordinates": [lng, ltd]
+      },
+      "profile": true
     }
   }
   ```
-- **Error Codes:** 400 (validation errors), 401 (unauthorized), 404 (worker not found), 500 (server error)
+- **Error Codes:** 
+  - 400 (invalid location coordinates)
+  - 401 (unauthorized, not a worker)
+  - 404 (worker not found)
+  - 500 (server error)
 
 ### User Profile Routes
 

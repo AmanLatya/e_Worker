@@ -4,7 +4,7 @@ const workerSchema = new mongoose.Schema(
   {
     name: { type: String },
     email: { type: String, lowercase: true, required: true, unique: true },
-    password: { type: String, select: false },
+    password: { type: String, required:true, select: false },
     googleId: { type: String },
     skill: { type: String },
     socketID: { type: String },
@@ -15,6 +15,10 @@ const workerSchema = new mongoose.Schema(
       lng: {
         type: Number,
       },
+    },
+    profile:{
+      type: Boolean,
+      default: false,
     },
     role: { type: String, default: "worker", enum: ["worker"] }, // ✅ Add this
   },
